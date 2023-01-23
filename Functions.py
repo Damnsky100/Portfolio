@@ -318,7 +318,7 @@ def gmv(cov, bounds):
 
 
 
-def msr(risk_free_rate, er, cov, bounds= (-2, 2) ):
+def msr(risk_free_rate, er, cov, bounds):
     """
     Returns the weights of the portfolio that gives you the maximum sharpe ratio given 
     the riskfree rate and expected returns and a covariance matrix
@@ -358,7 +358,7 @@ def msr(risk_free_rate, er, cov, bounds= (-2, 2) ):
 #################### Plotting Functions ####################
 
 
-def plot_ef(E_return, E_cov, Expected_Risk_free, Nbr_PTF, show_cml=False, show_gmv=False, bounds = (0,1)):
+def plot_ef(E_return, E_cov, Expected_Risk_free, Nbr_PTF, bounds,  show_cml=False, show_gmv=False):
     """Function to plot Efficient Frontier
 
     Args:
@@ -366,7 +366,7 @@ def plot_ef(E_return, E_cov, Expected_Risk_free, Nbr_PTF, show_cml=False, show_g
         E_cov (NxN): variance-covariance matrix
         Expected_Risk_free (int): Annualized Risk-Free rate
         Nbr_PTF (int): Number of points for your graph
-        bounds (tuple, optional): _description_. Defaults to (-2,2).
+        bounds (tuple, optional): _description
     """
     
     Efficient_frontiere_result = Ptf_target_optimization(E_return, E_cov, Nbr_PTF,
@@ -383,7 +383,7 @@ def plot_ef(E_return, E_cov, Expected_Risk_free, Nbr_PTF, show_cml=False, show_g
         Efficient_frontiere_result_W_RF.plot(kind='line')
         
         #Plot Portfolio Tangente
-        w = msr(Expected_Risk_free, E_return, E_cov)
+        w = msr(Expected_Risk_free, E_return, E_cov, bounds)
         y = portfolio_return(w, E_return)
         x = portfolio_vol(w, E_cov)
         plt.scatter(x,y, marker="o")
