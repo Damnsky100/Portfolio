@@ -153,7 +153,7 @@ def msr(risk_free_rate, er, cov):
     """
     n = er.shape[0] #determine the number of assets
     init_guess = np.repeat(1/n, n) #Initial weight vector is equally distributed
-    bounds = ((-2, 2),) * n #I don't want to be able to short, multiply a tuple make some copy of it
+    bounds = ((0, 1),) * n #I don't want to be able to short, multiply a tuple make some copy of it
     
     
     weights_sum_to_1 = {

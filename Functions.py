@@ -26,7 +26,7 @@ def Load_ind_data(path = "C:/Users/Sébastien/Desktop/TP1/48_Industry_Portfolios
 
 
 #Loader RF data (À voir si on change la méthodologie pour la sélection)
-def Load_rf(path = "C:\Users\Sébastien\Desktop\TP1\SOFR30DAYAVG.xls", date = '2021-08-01'):
+def Load_rf(path = "C:/Users/Sébastien/Desktop/TP1/SOFR30DAYAVG.xls", date = '2021-08-01'):
     
     Data_SOFR = pd.read_excel(path)
 
@@ -191,7 +191,6 @@ def Ptf_target_optimization(E_return, E_cov, Nbr_PTF, bounds = (-2, 2)):
 
 
 
-
 #################### With risk-free asset ####################
 
 
@@ -257,10 +256,155 @@ def Ptf_target_optimization_W_Rf(E_return, E_cov, Expected_Risk_free, Nbr_PTF, b
 
 
 
+#################### Porfolio Tangent & GMV Functions ####################
 
+
+def annualize_rets(r, periods_per_year):
+    """
+    Annualizes a set of returns
+    """
+    compounded_growth = (1+r).prod()
+    n_periods = r.shape[0]
+    return compounded_growth**(periods_per_year/n_periods)-1
+
+
+def annualize_vol(r, periods_per_year):
+    """
+    Annualizes the vol of a set of returns
+    """
+    return r.std()*(periods_per_year**0.5)
+
+
+def sharpe_ratio(r, riskfree_rate, periods_per_year):
+    """
+    Computes the annualized sharpe ratio of a set of returns
+    """
+    # convert the annual riskfree rate to per period
+    rf_per_period = (1+riskfree_rate)**(1/periods_per_year)-1
+    excess_ret = r - rf_per_period
+    ann_ex_ret = annualize_rets(excess_ret, periods_per_year)
+    ann_vol = annualize_vol(r, periods_per_year)
+    return ann_ex_ret/ann_vol
+
+
+
+
+
+def portfolio_return(weights, returns):
+    """
+    Computes the return on a portfolio from constituent returns and weights
+    weights are a numpy array or Nx1 matrix and returns are a numpy array or Nx1 matrix
+    """
+    return weights.T @ returns
+
+
+def portfolio_vol(weights, covmat):
+    """
+    Computes the vol of a portfolio from a covariance matrix and constituent weights
+    weights are a numpy array or N x 1 maxtrix and covmat is an N x N matrix
+    """
+    return (weights.T @ covmat @ weights)**0.5
+
+
+# Give the Global Minimum Vol Portfolio
+def gmv(cov, bounds):
+    """
+    Returns the weight of the Global Minimum Vol Portfolio given the cov matrix
+    """
+    n = cov.shape[0]
+    return msr(0, np.repeat(1, n), cov, bounds)
+
+
+
+
+
+def msr(risk_free_rate, er, cov, bounds= (-2, 2) ):
+    """
+    Returns the weights of the portfolio that gives you the maximum sharpe ratio given 
+    the riskfree rate and expected returns and a covariance matrix
+    
+    """
+    n = er.shape[0] #determine the number of assets
+    init_guess = np.repeat(1/n, n) #Initial weight vector is equally distributed
+    bounds = (bounds,) * n #I don't want to be able to short, multiply a tuple make some copy of it
+    
+    
+    weights_sum_to_1 = {
+        "type":"eq",         #{constraints} eq = equalize to 0
+        "fun": lambda weights: np.sum(weights) - 1
+    }
+    def neg_sharpe_ratio(weights, risk_free_rate, er, cov):
+        """
+        Returns the negative of the sharpe ratio, given weights
+        
+        """
+        r = portfolio_return(weights, er)
+        vol = portfolio_vol(weights, cov)
+        return  -(r-risk_free_rate) / vol
+        
+        
+    results = sco.minimize(neg_sharpe_ratio, init_guess,
+                       args = (risk_free_rate, er, cov,), method="SLSQP", 
+                       options= {"disp": False},
+                       constraints=(weights_sum_to_1),
+                       bounds = bounds
+                       )
+    return results.x
 
 
 
 
 
 #################### Plotting Functions ####################
+
+
+def plot_ef(E_return, E_cov, Expected_Risk_free, Nbr_PTF, show_cml=False, show_gmv=False, bounds = (0,1)):
+    """Function to plot Efficient Frontier
+
+    Args:
+        E_return (Array: Nx1): Annualized return
+        E_cov (NxN): variance-covariance matrix
+        Expected_Risk_free (int): Annualized Risk-Free rate
+        Nbr_PTF (int): Number of points for your graph
+        bounds (tuple, optional): _description_. Defaults to (-2,2).
+    """
+    
+    Efficient_frontiere_result = Ptf_target_optimization(E_return, E_cov, Nbr_PTF,
+                                                         bounds) #Without risk-free asset
+    
+    #Start by plotting result of efficient frontier without rf
+    plt = Efficient_frontiere_result['Efficient_frontiere']['Returns'].plot(kind='line',figsize=(15,11), 
+                                                                        xlim = [0, max(Efficient_frontiere_result['Efficient_frontiere'].index)+0.5], 
+                                                                        ylim = [0, max(Efficient_frontiere_result['Efficient_frontiere']['Returns'])+0.2]) 
+    if show_cml :
+        Efficient_frontiere_result_W_RF = Ptf_target_optimization_W_Rf(E_return, E_cov,
+                                                                   Expected_Risk_free, Nbr_PTF,
+                                                                   bounds)['Efficient_frontiere']['Returns'] #With risk-free Assets
+        Efficient_frontiere_result_W_RF.plot(kind='line')
+        
+        #Plot Portfolio Tangente
+        w = msr(Expected_Risk_free, E_return, E_cov)
+        y = portfolio_return(w, E_return)
+        x = portfolio_vol(w, E_cov)
+        plt.scatter(x,y, marker="o")
+        plt.annotate("Pf_t",(x,  y))
+        plt.legend(['Wihtout RF', 'With RF'])
+        
+    for i in E_return.index :
+            plt.scatter([np.sqrt(E_cov[i][i])],[E_return[i]], marker='o')
+            plt.annotate(i,(np.sqrt(E_cov[i][i]),E_return[i]))      
+          
+    #Plot GMV
+    if show_gmv:
+        w = gmv(E_cov, bounds)
+        y = portfolio_return(w, E_return)
+        x =  portfolio_vol(w, E_cov)   
+        plt.scatter(x,y, marker="o")
+        plt.annotate("GMV",(x,  y))
+    
+    #Set Titles 
+    plt.set_title("Efficient Frontier")
+    plt.set_xlabel("Volatility (Std)")
+    plt.set_ylabel("Return Annualized")
+    
+    return plt
