@@ -233,7 +233,7 @@ def Ptf_target_optimization_W_Rf(E_return, E_cov, Expected_Risk_free, Nbr_PTF, b
         ) 
         
         Var_level_W_O_S[0,i] = np.sqrt(2*Efficient_frontier_r['fun'])
-        Weigth_level_W_O_S[1:6,i] = Efficient_frontier_r['x']
+        Weigth_level_W_O_S[1:(len(E_return) + 1), i] = Efficient_frontier_r['x']
         Weigth_level_W_O_S[0,i] = 1-np.sum(Efficient_frontier_r['x'])
     
     Expected_return_W_RF= np.concatenate((np.array([Expected_Risk_free]),E_return))
