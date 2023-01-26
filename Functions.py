@@ -349,7 +349,7 @@ def msr(risk_free_rate, er, cov, bounds):
                        constraints=(weights_sum_to_1),
                        bounds = bounds
                        )
-    return results
+    return results.x
 
 
 
