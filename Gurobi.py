@@ -1,56 +1,95 @@
-
 import gurobipy as gp
 from gurobipy import GRB, abs_
 import numpy as np
 import pandas as pd
 
 
+##################### Function to help #####################
+
+def annualize_rets(r, periods_per_year):
+    """
+    Annualizes a set of returns
+    """
+    compounded_growth = (1+r).prod()
+    n_periods = r.shape[0]
+    return compounded_growth**(periods_per_year/n_periods)-1
+
+
+
+def annualize_vol(r, periods_per_year):
+    """
+    Annualizes the vol of a set of returns
+    """
+    return r.std()*(periods_per_year**0.5)
+
+
 
 ## Max return Function
 def max_return_Gurobi(E_return, K, bounds = (-2,2)):
+  """Fonction qui donne le return maximum selon la composition
+  du portefeuille
+
+  Args:
+      E_return (_type_): Pd.Series --> Return des actifs Nx1
+      K (_type_): Contrainte sur le nombre d'actifs
+      bounds (tuple, optional): Contrainte sur les poids pour chaque actif.
+
+  Returns:
+      _type_: Dictionnary return + weight
+  """
     #E_return must be a pandas.core.series.Series
-    sampled_tickers = np.array(E_return.index)
+  sampled_tickers = np.array(E_return.index)
     
-    m_const = gp.Model("asset_constrained_model")
-    w = pd.Series(m_const.addVars(sampled_tickers,
+  m_const = gp.Model("asset_constrained_model")
+  
+  #Déclare la variable weight
+  w = pd.Series(m_const.addVars(sampled_tickers,
                   lb = bounds[0],
                   ub = bounds[1],          
                 vtype = gp.GRB.CONTINUOUS),
                 index =  sampled_tickers)
-    z = pd.Series(m_const.addVars(sampled_tickers, 
+  
+  #Variable pour le nombre d'actif (Valeur 1 ou 0)
+  z = pd.Series(m_const.addVars(sampled_tickers, 
                 vtype = gp.GRB.BINARY),
                 index =  sampled_tickers)
     
-    # Maximum number of assets constraint
-    m_const.addConstr(sum(z[i_ticker] for i_ticker in sampled_tickers) <= K, "max_assets")
+  # Maximum number of assets constraint
+  m_const.addConstr(sum(z[i_ticker] for i_ticker in sampled_tickers) <= K, "max_assets")
     
-    #sum(w_i) == 1 (Long only)
-    m_const.addConstr(w.sum() == 1, "port_budget")
-    m_const.Params.LogToConsole = 0
-    for i_ticker in sampled_tickers:
-        
+  #sum(w_i) == 1 (Long only)
+  m_const.addConstr(w.sum() == 1, "port_budget")
+  
+  #Enlever les prints de recherche de fonction
+  m_const.Params.LogToConsole = 0
+  
+  #Contrainte pour que abs(w) < z qui prend une valeur binaire
+  for i_ticker in sampled_tickers:
       m_const.addConstr(w[i_ticker] <= z[i_ticker] * 2, f"w_{i_ticker}_positive")
       m_const.addConstr(-w[i_ticker] <= z[i_ticker] * 2, f"w_{i_ticker}_negative")
       
-    # Set the objective function as the portfolio risk
-    portfolio_risk = -E_return @ w
+  # Set the objective function as the portfolio risk
+  portfolio_risk = -E_return @ w
     
-    m_const.setObjective(portfolio_risk, GRB.MINIMIZE)
+  m_const.setObjective(portfolio_risk, GRB.MINIMIZE)
+  
+  m_const.optimize()
     
-    m_const.optimize()
-    
-    weigth = [np.round(w[i].x, 4) for i in range(len(sampled_tickers))]
+  weigth = [np.round(w[i].x, 4) for i in range(len(sampled_tickers))]
     
     
-    res = {"Return": -m_const.ObjVal, 
+  res = {"Return": -m_const.ObjVal, 
            "Weight": weigth}
     
-    return res
+  return res
 
 
 ## Min variance PF
 
 def min_variance_Gurobi(E_return, E_cov, K, bounds = (-2,2)):
+      
+      
+      
     #E_return must be a pandas.core.series.Series
     sampled_tickers = np.array(E_return.index)
     
@@ -126,6 +165,7 @@ def Ptf_target_optimization_Gurobi(E_return, E_cov, K, Nbr_PTF, bounds = (-2, 2)
 
     #sum(w_i) == 1 (Long only)
     m_const.addConstr(w.sum() == 1, "port_budget")
+    
     m_const.Params.LogToConsole = 0
 
 
@@ -139,8 +179,8 @@ def Ptf_target_optimization_Gurobi(E_return, E_cov, K, Nbr_PTF, bounds = (-2, 2)
 
     for i_ticker in sampled_tickers:
               
-        m_const.addConstr(w[i_ticker] <= z[i_ticker] * 2, f"w_{i_ticker}_positive")
-        m_const.addConstr(-w[i_ticker] <= z[i_ticker] * 2, f"w_{i_ticker}_negative")
+        m_const.addConstr(w[i_ticker] <= z[i_ticker] * bounds[1], f"w_{i_ticker}_positive")
+        m_const.addConstr(-w[i_ticker] <= z[i_ticker] * bounds[1], f"w_{i_ticker}_negative")
 
 
         # Set the objective function as the portfolio risk
@@ -173,7 +213,9 @@ def Ptf_target_optimization_Gurobi(E_return, E_cov, K, Nbr_PTF, bounds = (-2, 2)
 def Ptf_target_optimization_W_Rf_Gurobi(E_return, E_cov, Expected_Risk_free, K, Nbr_PTF, bounds = (-2, 2)):
       
   sampled_tickers = np.array(E_return.index)
+  
   Weigth_names = np.concatenate((np.array(['Risk_free']), np.array(E_return.index)))
+  
   n = E_return.shape[0]
       
   
@@ -279,14 +321,16 @@ def plot_ef_Gurobi(E_return, E_cov, Expected_Risk_free, K, Nbr_PTF, bounds, show
         bounds (tuple, optional): _description
     """
     
-    (E_return, E_cov, K, Nbr_PTF, bounds)
+    n = E_return.shape[0]
     
     Efficient_frontiere_result = Ptf_target_optimization_Gurobi(E_return, E_cov, K, Nbr_PTF, bounds) #Without risk-free asset
     
+    
+    max_vol = max(np.array(E_cov).diagonal().max()**0.5, max(Efficient_frontiere_result['Efficient_frontiere'].index)) 
     #Start by plotting result of efficient frontier without rf
     plt = Efficient_frontiere_result['Efficient_frontiere']['Returns'].plot(kind='line',figsize=(15,11), 
-                                                                        xlim = [0, max(Efficient_frontiere_result['Efficient_frontiere'].index)+0.5], 
-                                                                        ylim = [0, max(Efficient_frontiere_result['Efficient_frontiere']['Returns'])+0.2]) 
+                                                                        xlim = [0, max_vol + 1], 
+                                                                        ylim = [0, max(Efficient_frontiere_result['Efficient_frontiere']['Returns'])+0.05]) 
     if show_cml :
         Efficient_frontiere_result_W_RF =Ptf_target_optimization_W_Rf_Gurobi(E_return, E_cov, Expected_Risk_free,
                                                                              K, Nbr_PTF, bounds)['Efficient_frontiere']['Returns'] #With risk-free Assets
@@ -294,8 +338,8 @@ def plot_ef_Gurobi(E_return, E_cov, Expected_Risk_free, K, Nbr_PTF, bounds, show
         
         #Plot Portfolio Tangente
         res = tangent_Gurobi(E_return, E_cov, Expected_Risk_free, K, Nbr_PTF, bounds)
-        y = res.iloc[0][5]
-        x = res.iloc[0][6]
+        y = res.iloc[0][n]
+        x = res.iloc[0][n+1]
         plt.scatter(x,y, marker="o")
         plt.annotate("Pf_t",(x,  y))
         plt.legend(['Wihtout RF', 'With RF'])

@@ -245,7 +245,7 @@ def Ptf_target_optimization_W_Rf(E_return, E_cov, Expected_Risk_free, Nbr_PTF, b
     
     Efficient_frontiere_df = pd.DataFrame(Efficient_frontiere.T,columns=['Returns','Standard_deviation'])
     Efficient_frontiere_df.set_index('Standard_deviation', inplace=True)
-    Efficient_frontiere_weigth = pd.DataFrame(Weigth_level_W_O_S.T,columns=Weigth_names)
+    Efficient_frontiere_weigth = pd.DataFrame(Weigth_level_W_O_S.T, columns=Weigth_names)
     
     Efficient_frontiere_result = dict([('Efficient_frontiere',Efficient_frontiere_df),
                                            ('Efficient_frontiere_weigth',Efficient_frontiere_weigth)])
