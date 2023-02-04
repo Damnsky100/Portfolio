@@ -10,6 +10,7 @@ from sklearn.model_selection import TimeSeriesSplit
 from sklearn.linear_model import Lasso,LassoCV
 from sklearn.metrics import mean_squared_error,r2_score,mean_absolute_percentage_error
 from sklearn.preprocessing import StandardScaler
+from sklearn import covariance
 
 #################### Importer les données ####################
 
@@ -641,3 +642,10 @@ def plot_ef(E_return, E_cov, Expected_Risk_free, Nbr_PTF, bounds,  show_cml=Fals
     plt.set_ylabel("Return Annualized")
     
     return plt
+
+#################### Covariance Matrix ####################
+
+
+def Ledoit_wolf(returns):
+    Est_cov= pd.DataFrame(data=covariance.ledoit_wolf(returns)[0],index=returns.columns,columns=returns.columns)
+    return Est_cov
