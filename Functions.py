@@ -530,7 +530,7 @@ def Lasso_regression(Data_regression_lasso):
         
     
     # Model parametrization :
-        tscv = TimeSeriesSplit(n_splits=2,test_size=8) # Cross validatation 
+        tscv = TimeSeriesSplit(n_splits=3,test_size=9) # Cross validatation 
         model = LassoCV(cv=tscv) # try to find the optimal alpha (penalization)
         model.fit(V_R_train, Y_train[industrie])
     
