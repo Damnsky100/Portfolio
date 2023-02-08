@@ -1,8 +1,5 @@
 ##Importer les librairies
 import importlib
-import Gurobi as g
-
-importlib.reload(g)
 
 import numpy as np
 import pandas as pd
@@ -65,230 +62,18 @@ def Load_lasso_variable(path_regression):
     return(Variable_regression)
 
 
-def areaplot(E_return, E_cov_1, K, Nbr_PTF, bounds):
-    tmp1 = g.Ptf_target_optimization_Gurobi(E_return, E_cov_1, K, Nbr_PTF, bounds = (0, 1))["Efficient_frontiere"]
-    tmp = g.Ptf_target_optimization_Gurobi(E_return, E_cov_1, K, Nbr_PTF, bounds = (0, 1))["Efficient_frontiere_weigth"]
-    
-    tmp.index = tmp1.index
-    return tmp.plot.area(stacked = False)
+
 #################### Without risk-free asset : ####################
 
 ##### Determination of the maximum return portfolio (under certain constraints) #####
 
 
+import gurobipy as gp
+from gurobipy import GRB, abs_
 
 
 
-
-def Max_return_ptf(E_return, bounds = (0, 1)):
-      
-    #Initialize variables
-    
-    Initial_weights = np.array([1 / len(E_return)] * len(E_return))
-    bounds = tuple(bounds for w in Initial_weights)
-    Industrie_selected = E_return.index
-    constraints_max_ret = ( {'type': 'eq', 'fun': lambda x: np.sum(x) - 1}) # Sum of the weigth need to sum to 1
-    
-# Define objective fonction to minimize :
-    def Max_return_obj (weigth, E_return = E_return.values):
-        return - np.dot(weigth.T, E_return)
-    
-# Compute the maximum return portfolio by optimisation under constraints: 
-    Max_ret_PTF = sco.minimize(
-
-      fun = Max_return_obj, 
-      x0 = Initial_weights, 
-      method = 'SLSQP',
-      bounds = bounds, 
-      constraints = constraints_max_ret
-    
-    )
-
-    Max_ret_weigth = pd.DataFrame(Max_ret_PTF['x'], index=Industrie_selected,columns = ['Weigth'])
-
-    Max_ret_return = pd.DataFrame([np.dot(Max_ret_PTF['x'].T, E_return.values)], columns = ['return'])
-    
-    Max_return = {'Max_ret_return' : Max_ret_return,
-                       'Max_ret_weigth' : Max_ret_weigth.T}
-    return(Max_return)
-
-
-
-
-
-##### Determination of the minimum-variance  portfolio  #####
-
-def Min_var_ptf(E_return, E_cov, bounds = (-2,2)):
-    
-    #Initialize variables
-    
-    Initial_weights = np.array([1 / len(E_return)] * len(E_return))
-    bounds = tuple(bounds for w in Initial_weights)
-    Industrie_selected = E_return.index
-    constraints_min_var = ( {'type': 'eq', 'fun': lambda x: np.sum(x) - 1}) # Sum of the weigth need to sum to 1
-   
-    
-    # Define objective fonction to minimize :
-
-    def Min_Variance_obj (weigth,Cov_matrix = E_cov) : 
-        return (0.5*np.dot(np.dot(weigth.T,Cov_matrix),weigth))
-    
-    
-# Compute the minimum variance portfolio by optimisation under constraints: 
-
-    Min_var_PTF = sco.minimize(
-
-      fun = Min_Variance_obj, 
-      x0 = Initial_weights, 
-      method = 'SLSQP',
-      constraints = constraints_min_var,
-      bounds = bounds
-    
-    )
-
-    Min_var_weigth = pd.DataFrame(Min_var_PTF['x'], index=Industrie_selected, columns= ['Weigth'])
-
-    Min_var_return = pd.DataFrame([np.dot(Min_var_PTF['x'].T, E_return.values)], columns= ['return'])
-    
-    Min_var = {'Min_var_return': Min_var_return,
-                     'Min_var_weigth': Min_var_weigth.T}
-  
-    return(Min_var)
-
-
-
-
-##### Determination of the optimal  portfolio  for a given return  #####
-
-def Ptf_target_optimization(E_return, E_cov, Nbr_PTF, bounds = (-2, 2)):
-    
-    #Define Variables
-    
-    Min_var_result = Min_var_ptf(E_return, E_cov, bounds)
-    Max_return_result = Max_return_ptf(E_return, bounds)
-    
-    Initial_weights = np.array([1 / len(E_return)] * len(E_return))
-    bounds = tuple(bounds for w in Initial_weights)
-    
-    
-    
-    Target_return = np.linspace (Min_var_result['Min_var_return'].iloc[0]['return'], Max_return_result['Max_ret_return'].iloc[0]['return'], Nbr_PTF)
-    Weigth_names = E_return.index
-    Weigth_level = np.zeros((len(E_return), Nbr_PTF)) #Initialize the array
-    Var_level = np.zeros((1, Nbr_PTF))
-    
-    
-    # Define objective fonction to minimize :
-
-    def Min_Variance_obj (weigth, Cov_matrix = E_cov) : 
-        return (0.5*np.dot(np.dot(weigth.T, Cov_matrix), weigth))
-    
-    # Optimization for each return target :
-
-    constraints = (
-        {'type': 'eq', 'fun': lambda x: np.sum(x*E_return.values) - target}, # Optimization for a target return 
-        {'type': 'eq', 'fun': lambda x: np.sum(x) - 1})
-
-    for i in range(0,Nbr_PTF):
-        target = Target_return[i]
-        Efficient_frontier_result =  sco.minimize(
-            fun = Min_Variance_obj, 
-            x0 = Initial_weights, 
-            method = 'SLSQP', 
-            constraints = constraints,
-            bounds = bounds
-        ) 
-        
-        Weigth_level[:,i] = Efficient_frontier_result ['x']
-        Var_level[0,i] = np.sqrt(2*Efficient_frontier_result['fun'])
-    
-    Return_effectiv = np.dot(E_return.values, Weigth_level)
-    Efficient_frontiere = np.concatenate((np.array([Target_return]), Var_level))
-    
-    # Data formatting 
-    
-    Efficient_frontiere_df = pd.DataFrame(Efficient_frontiere.T, columns=['Returns', 'Standard_deviation'])
-    Efficient_frontiere_df.set_index('Standard_deviation', inplace=True)
-    
-    Efficient_frontiere_weigth = pd.DataFrame(Weigth_level.T, columns=Weigth_names)
-    
-    Efficient_frontiere_result = {'Efficient_frontiere': Efficient_frontiere_df,
-                                           'Efficient_frontiere_weigth': Efficient_frontiere_weigth}
-    
-    return(Efficient_frontiere_result)
-
-
-
-
-
-
-#################### With risk-free asset ####################
-
-
-def Ptf_target_optimization_W_Rf(E_return, E_cov, Expected_Risk_free, Nbr_PTF, bounds = (-2,2)):
-    
-     #Define Variables
-    
-    Max_return_result = Max_return_ptf(E_return, bounds)
-    
-    Initial_weights = np.array([1 / len(E_return)] * len(E_return))
-    bounds = tuple(bounds for w in Initial_weights)
-    
-    
-    Target_return = np.linspace(Expected_Risk_free, Max_return_result['Max_ret_return'].iloc[0]['return'], Nbr_PTF)
-    Weigth_names =  np.concatenate((np.array(['Risk_free']) , E_return.index.values))
-    
-    Var_level_W_O_S = np.zeros((1, Nbr_PTF))
-    Weigth_level_W_O_S = np.zeros((len(E_return) + 1 , Nbr_PTF)) #Initialize the array
-    
-    
-    
-    # Define objective fonction to minimize :
-
-    def Min_Variance_obj (weigth, Cov_matrix = E_cov) : 
-        return (0.5*np.dot(np.dot(weigth.T, Cov_matrix), weigth))
-    # Constraint :
-
-    constraints_W_RF = (
-          {'type': 'eq', 'fun': lambda x: np.sum(x*(E_return.values-Expected_Risk_free)) - (target-Expected_Risk_free)}) # Optimization for a target return 
-
-
-    for i in range(0,Nbr_PTF):
-        target = Target_return[i]
-        Efficient_frontier_r =  sco.minimize(
-            fun = Min_Variance_obj, 
-            x0 = Initial_weights, 
-            method = 'SLSQP', 
-            constraints = constraints_W_RF,
-            bounds = bounds
-        ) 
-        
-        Var_level_W_O_S[0,i] = np.sqrt(2*Efficient_frontier_r['fun'])
-        Weigth_level_W_O_S[1:(len(E_return) + 1), i] = Efficient_frontier_r['x']
-        Weigth_level_W_O_S[0,i] = 1-np.sum(Efficient_frontier_r['x'])
-    
-    Expected_return_W_RF= np.concatenate((np.array([Expected_Risk_free]),E_return))
-    Return_effectiv= np.dot(Expected_return_W_RF,Weigth_level_W_O_S)
-    
-    Efficient_frontiere = np.concatenate((np.array([Return_effectiv]),Var_level_W_O_S))
-    
-    # Data formatting 
-    
-    Efficient_frontiere_df = pd.DataFrame(Efficient_frontiere.T,columns=['Returns','Standard_deviation'])
-    Efficient_frontiere_df.set_index('Standard_deviation', inplace=True)
-    Efficient_frontiere_weigth = pd.DataFrame(Weigth_level_W_O_S.T,columns=Weigth_names)
-    
-    Efficient_frontiere_result = dict([('Efficient_frontiere',Efficient_frontiere_df),
-                                           ('Efficient_frontiere_weigth',Efficient_frontiere_weigth)])
-    
-    return(Efficient_frontiere_result)
-
-
-
-
-
-#################### Porfolio Tangent & GMV Functions ####################
-
+##################### Gurobi Function to help #####################
 
 #def annualize_rets(r, periods_per_year):
 #    """
@@ -298,12 +83,6 @@ def Ptf_target_optimization_W_Rf(E_return, E_cov, Expected_Risk_free, Nbr_PTF, b
 #    n_periods = r.shape[0]
 #    return compounded_growth**(periods_per_year/n_periods)-1
 
-#def annualize_rets_prediction(r, periods_per_year):
-#    """
-#    Annualizes a set of returns
-#    """
-#    R_A = (((1+r)**periods_per_year)-1)
-#    return R_A
 
 
 #def annualize_vol(r, periods_per_year):
@@ -313,84 +92,364 @@ def Ptf_target_optimization_W_Rf(E_return, E_cov, Expected_Risk_free, Nbr_PTF, b
 #    return r.std()*(periods_per_year**0.5)
 
 
-def sharpe_ratio(r, riskfree_rate, periods_per_year):
-    """
-    Computes the annualized sharpe ratio of a set of returns
-    """
-    # convert the annual riskfree rate to per period
-    #rf_per_period = (1+riskfree_rate)**(1/periods_per_year)-1
-    excess_ret = r - rf_per_period
+
+## Max return Function
+def max_return_Gurobi(E_return, K, bounds = (-2,2)):
+  """Fonction qui donne le return maximum selon la composition
+  du portefeuille
+
+  Args:
+      E_return (_type_): Pd.Series --> Return des actifs Nx1
+      K (_type_): Contrainte sur le nombre d'actifs
+      bounds (tuple, optional): Contrainte sur les poids pour chaque actif.
+
+  Returns:
+      _type_: Dictionnary return + weight
+  """
+    #E_return must be a pandas.core.series.Series
+  sampled_tickers = np.array(E_return.index)
     
-    #ann_ex_ret = annualize_rets(excess_ret, periods_per_year)
-    #ann_vol = annualize_vol(r, periods_per_year)
-    vol =r.std()
-    return ex_ret.mean()/vol
-
-
-
-
-
-def portfolio_return(weights, returns):
-    """
-    Computes the return on a portfolio from constituent returns and weights
-    weights are a numpy array or Nx1 matrix and returns are a numpy array or Nx1 matrix
-    """
-    return weights.T @ returns
-
-
-def portfolio_vol(weights, covmat):
-    """
-    Computes the vol of a portfolio from a covariance matrix and constituent weights
-    weights are a numpy array or N x 1 maxtrix and covmat is an N x N matrix
-    """
-    return (weights.T @ covmat @ weights)**0.5
-
-
-# Give the Global Minimum Vol Portfolio
-def gmv(cov, bounds):
-    """
-    Returns the weight of the Global Minimum Vol Portfolio given the cov matrix
-    """
-    n = cov.shape[0]
-    return msr(0, np.repeat(1, n), cov, bounds)
-
-
-
-
-
-def msr(risk_free_rate, er, cov, bounds):
-    """
-    Returns the weights of the portfolio that gives you the maximum sharpe ratio given 
-    the riskfree rate and expected returns and a covariance matrix
+  m_const = gp.Model("asset_constrained_model")
+  
+  #Déclare la variable weight
+  w = pd.Series(m_const.addVars(sampled_tickers,
+                  lb = bounds[0],
+                  ub = bounds[1],          
+                vtype = gp.GRB.CONTINUOUS),
+                index =  sampled_tickers)
+  
+  #Variable pour le nombre d'actif (Valeur 1 ou 0)
+  z = pd.Series(m_const.addVars(sampled_tickers, 
+                vtype = gp.GRB.BINARY),
+                index =  sampled_tickers)
     
-    """
-    n = er.shape[0] #determine the number of assets
-    init_guess = np.repeat(1/n, n) #Initial weight vector is equally distributed
-    bounds = (bounds,) * n #I don't want to be able to short, multiply a tuple make some copy of it
+  # Maximum number of assets constraint
+  m_const.addConstr(sum(z[i_ticker] for i_ticker in sampled_tickers) <= K, "max_assets")
+    
+  #sum(w_i) == 1 (Long only)
+  m_const.addConstr(w.sum() == 1, "port_budget")
+  
+  #Enlever les prints de recherche de fonction
+  m_const.Params.LogToConsole = 0
+  
+  #Contrainte pour que abs(w) < z qui prend une valeur binaire
+  for i_ticker in sampled_tickers:
+      m_const.addConstr(w[i_ticker] <= z[i_ticker] * 2, f"w_{i_ticker}_positive")
+      m_const.addConstr(-w[i_ticker] <= z[i_ticker] * 2, f"w_{i_ticker}_negative")
+      
+  # Set the objective function as the portfolio risk
+  portfolio_risk = -E_return @ w
+    
+  m_const.setObjective(portfolio_risk, GRB.MINIMIZE)
+  
+  m_const.optimize()
+    
+  weigth = [np.round(w[i].x, 4) for i in range(len(sampled_tickers))]
     
     
-    weights_sum_to_1 = {
-        "type":"eq",         #{constraints} eq = equalize to 0
-        "fun": lambda weights: np.sum(weights) - 1
-    }
-    def neg_sharpe_ratio(weights, risk_free_rate, er, cov):
-        """
-        Returns the negative of the sharpe ratio, given weights
+  res = {"Return": -m_const.ObjVal, 
+           "Weight": weigth}
+    
+  return res
+
+
+## Min variance PF
+
+def min_variance_Gurobi(E_return, E_cov, K, bounds = (-2,2)):
+      
+      
+      
+    #E_return must be a pandas.core.series.Series
+    sampled_tickers = np.array(E_return.index)
+    
+  
+    
+    
+    #Create the model
+    m_const = gp.Model("asset_constrained_model")
+    w = pd.Series(m_const.addVars(sampled_tickers,
+                  lb = bounds[0],
+                  ub = bounds[1],          
+                vtype = gp.GRB.CONTINUOUS),
+                index =  sampled_tickers)
+    
+    z = pd.Series(m_const.addVars(sampled_tickers, 
+                vtype = gp.GRB.BINARY),
+                index =  sampled_tickers)
+    
+    #Constraints
+    m_const.addConstr(w.sum() == 1, "port_budget")
+    m_const.Params.LogToConsole = 0
+    m_const.addConstr(sum(z[i_ticker] for i_ticker in sampled_tickers) <= K, "max_assets")
+    
+    for i_ticker in sampled_tickers:
+      m_const.addConstr(w[i_ticker] <= z[i_ticker] * 2, f"w_{i_ticker}_positive")
+      m_const.addConstr(-w[i_ticker] <= z[i_ticker] * 2, f"w_{i_ticker}_negative")
+      
+      # Set the objective function as the portfolio risk
+    portfolio_risk = w @ E_cov @ w
+    m_const.setObjective(portfolio_risk, GRB.MINIMIZE)
+    m_const.optimize()
+    weigth = [np.round(w[i].x, 4) for i in range(len(sampled_tickers))]
+    vol = (m_const.ObjVal)**0.5
+    ret = E_return @ weigth
+    
+    res = {"Return": ret, 
+           "Weight": weigth, 
+           "Vol": vol}
+    
+    return res
+
+ 
+ 
+ 
+##### Determination of the optimal  portfolio  for a given return  #####
+def Ptf_target_optimization_Gurobi(E_return, E_cov, K, Nbr_PTF, bounds = (-2, 2)):
+      
+  
+  sampled_tickers = np.array(E_return.index)
+  n = E_return.shape[0]
+      
+  
+  Weigth = np.zeros((Nbr_PTF, n)) #Initialize the array
+  Var = np.zeros((1, Nbr_PTF))
+  
+  r = np.linspace(min_variance_Gurobi(E_return, E_cov, K, bounds)["Return"], max_return_Gurobi(E_return, K, bounds)["Return"], Nbr_PTF)
+  
+
+  for i in range(Nbr_PTF):
+          
+    m_const = gp.Model("asset_constrained_model")
+
+    #w_i : i_th stock gets a weight w_i
+    w = pd.Series(m_const.addVars(sampled_tickers,
+                        lb = bounds[0],
+                        ub = bounds[1],          
+                      vtype = gp.GRB.CONTINUOUS),
+                      index =  sampled_tickers)
+    
+    z = pd.Series(m_const.addVars(sampled_tickers, 
+                      vtype = gp.GRB.BINARY),
+                      index =  sampled_tickers)
+
+    #sum(w_i) == 1 (Long only)
+    m_const.addConstr(w.sum() == 1, "port_budget")
+    
+    m_const.Params.LogToConsole = 0
+
+
+    # Maximum number of assets constraint
+    m_const.addConstr(sum(z[i_ticker] for i_ticker in sampled_tickers) <= K, "max_assets")
+
+      #Return Constrain
+    portfolio_ret = E_return @ w
+    portfolio_targ = r[i]
+    m_const.addConstr(portfolio_ret == portfolio_targ, "return")
+
+    for i_ticker in sampled_tickers:
+              
+        m_const.addConstr(w[i_ticker] <= z[i_ticker] * bounds[1], f"w_{i_ticker}_positive")
+        m_const.addConstr(-w[i_ticker] <= z[i_ticker] * bounds[1], f"w_{i_ticker}_negative")
+
+
+        # Set the objective function as the portfolio risk
+    portfolio_risk = w @ E_cov @ w
+    m_const.setObjective(portfolio_risk, GRB.MINIMIZE) 
         
-        """
-        r = portfolio_return(weights, er)
-        vol = portfolio_vol(weights, cov)
-        return  -(r-risk_free_rate) / vol
+    m_const.optimize()
         
+    Weigth[i, :] = np.round((m_const.X)[:n] ,4)
+    Var[0,i] = np.sqrt(m_const.ObjVal)
         
-    results = sco.minimize(neg_sharpe_ratio, init_guess,
-                       args = (risk_free_rate, er, cov,), method="SLSQP", 
-                       options= {"disp": False},
-                       constraints=(weights_sum_to_1),
-                       bounds = bounds
-                       )
-    return results.x
 
+  Efficient_frontiere = np.concatenate((np.array([r]), Var))
+  # Data formatting 
+      
+  Efficient_frontiere_df = pd.DataFrame(Efficient_frontiere.T, columns=['Returns', 'Standard_deviation'])
+  Efficient_frontiere_df.set_index('Standard_deviation', inplace=True)
+      
+  Efficient_frontiere_weigth = pd.DataFrame(Weigth, columns=sampled_tickers)
+      
+  Efficient_frontiere_result = {'Efficient_frontiere': Efficient_frontiere_df,
+                                            'Efficient_frontiere_weigth': Efficient_frontiere_weigth}
+  return Efficient_frontiere_result
+
+
+
+#################### With risk-free asset ####################
+
+
+def Ptf_target_optimization_W_Rf_Gurobi(E_return, E_cov, Expected_Risk_free, K, Nbr_PTF, bounds = (-2, 2)):
+      
+  sampled_tickers = np.array(E_return.index)
+  
+  Weigth_names = np.concatenate((np.array(['Risk_free']), np.array(E_return.index)))
+  
+  n = E_return.shape[0]
+      
+  
+  Weigth = np.zeros((Nbr_PTF, n + 1)) #Initialize the array
+  Var = np.zeros((1, Nbr_PTF))
+  
+  r = np.linspace(Expected_Risk_free, max_return_Gurobi(E_return, K, bounds)["Return"], Nbr_PTF)
+  
+
+  for i in range(Nbr_PTF):
+          
+    m_const = gp.Model("asset_constrained_model")
+
+    #w_i : i_th stock gets a weight w_i
+    w = pd.Series(m_const.addVars(sampled_tickers,
+                        lb = bounds[0],
+                        ub = bounds[1],          
+                      vtype = gp.GRB.CONTINUOUS),
+                      index =  sampled_tickers)
+    
+    z = pd.Series(m_const.addVars(sampled_tickers, 
+                      vtype = gp.GRB.BINARY),
+                      index =  sampled_tickers)
+
+    
+    # Maximum number of assets constraint
+    m_const.addConstr(sum(z[i_ticker] for i_ticker in sampled_tickers) <= K, "max_assets")
+    m_const.Params.LogToConsole = 0
+
+     #Return Constrain
+    portfolio_ret = (E_return - Expected_Risk_free) @ w
+    portfolio_targ = (r[i] - Expected_Risk_free)
+    m_const.addConstr(portfolio_ret == portfolio_targ, "return")
+
+    for i_ticker in sampled_tickers:
+              
+        m_const.addConstr(w[i_ticker] <= z[i_ticker] * bounds[1], f"w_{i_ticker}_positive")
+        m_const.addConstr(-w[i_ticker] <= z[i_ticker] * bounds[1], f"w_{i_ticker}_negative")
+
+
+        # Set the objective function as the portfolio risk
+    portfolio_risk = w @ E_cov @ w
+    m_const.setObjective(portfolio_risk, GRB.MINIMIZE) 
+        
+    m_const.optimize()
+        
+    Weigth[i, 1:(n + 1)] = np.round((m_const.X)[:n], 4)
+    Weigth[i, 0] = np.round(1 - np.sum(Weigth[i, 1:(len(E_return) + 1)]), 4)
+    Var[0,i] = np.round(np.sqrt(m_const.ObjVal), 4)
+        
+
+  Expected_return_W_RF= np.concatenate((np.array([Expected_Risk_free]), E_return))
+  Return_effectiv= Expected_return_W_RF @ Weigth.T
+    
+  Efficient_frontiere = np.concatenate((np.array([Return_effectiv]), Var))
+    
+    # Data formatting 
+    
+  Efficient_frontiere_df = pd.DataFrame(Efficient_frontiere.T,columns=['Returns','Standard_deviation'])
+  Efficient_frontiere_df.set_index('Standard_deviation', inplace=True)
+  Efficient_frontiere_weigth = pd.DataFrame(Weigth, columns=Weigth_names)
+    
+  Efficient_frontiere_result = dict([('Efficient_frontiere',Efficient_frontiere_df),
+                                           ('Efficient_frontiere_weigth',Efficient_frontiere_weigth)])
+    
+  return(Efficient_frontiere_result)
+
+
+
+
+## Find Tangent Portfolio
+def tangent_Gurobi(E_return, E_cov, Expected_Risk_free, K, Nbr_PTF, bounds):
+    
+    tmp1 = Ptf_target_optimization_Gurobi(E_return, E_cov, K, Nbr_PTF, bounds)["Efficient_frontiere_weigth"]
+    tmp = Ptf_target_optimization_Gurobi(E_return, E_cov, K, Nbr_PTF, bounds)["Efficient_frontiere"]
+    
+    vol = np.array(tmp.index)
+    ret = np.array(tmp["Returns"])
+    
+
+    
+    frontier = pd.DataFrame(tmp1)
+    frontier["Return"] = ret
+    frontier["Volatility"] = vol
+
+    frontier['Sharpe'] = (frontier['Return'] - Expected_Risk_free) / frontier['Volatility']
+    idx = frontier['Sharpe'].max()
+    sharpeMax = frontier.loc[frontier['Sharpe'] == idx]
+    return sharpeMax
+
+
+
+
+#################### Plotting ####################
+def plot_ef_Gurobi(E_return, E_cov, Expected_Risk_free, K, Nbr_PTF, bounds, show_cml=False, show_gmv=False):
+    """Function to plot Efficient Frontier
+
+    Args:
+        E_return (Array: Nx1): Annualized return
+        E_cov (NxN): variance-covariance matrix
+        Expected_Risk_free (int): Annualized Risk-Free rate
+        Nbr_PTF (int): Number of points for your graph
+        bounds (tuple, optional): _description
+    """
+    
+    n = E_return.shape[0]
+    
+    Efficient_frontiere_result = Ptf_target_optimization_Gurobi(E_return, E_cov, K, Nbr_PTF, bounds) #Without risk-free asset
+    
+    
+    max_vol = max(np.array(E_cov).diagonal().max()**0.5, max(Efficient_frontiere_result['Efficient_frontiere'].index)) 
+    #Start by plotting result of efficient frontier without rf
+    plt = Efficient_frontiere_result['Efficient_frontiere']['Returns'].plot(kind='line',figsize=(15,11), 
+                                                                        xlim = [0, max_vol + 0.01], 
+                                                                        ylim = [min(Efficient_frontiere_result['Efficient_frontiere']['Returns'])-0.01, max(Efficient_frontiere_result['Efficient_frontiere']['Returns'])+0.005]) 
+    if show_cml :
+        Efficient_frontiere_result_W_RF =Ptf_target_optimization_W_Rf_Gurobi(E_return, E_cov, Expected_Risk_free,
+                                                                             K, Nbr_PTF, bounds)['Efficient_frontiere']['Returns'] #With risk-free Assets
+        Efficient_frontiere_result_W_RF.plot(kind='line')
+        
+        #Plot Portfolio Tangente
+        res = tangent_Gurobi(E_return, E_cov, Expected_Risk_free, K, Nbr_PTF, bounds)
+        y = res.iloc[0][n]
+        x = res.iloc[0][n+1]
+        plt.scatter(x,y, marker="o")
+        plt.annotate("Pf_t",(x,  y))
+        plt.legend(['Wihtout RF', 'With RF'])
+        
+    for i in E_return.index :
+            plt.scatter([np.sqrt(E_cov[i][i])],[E_return[i]], marker='o')
+            plt.annotate(i,(np.sqrt(E_cov[i][i]),E_return[i]))      
+          
+    #Plot GMV
+    if show_gmv:
+        res = min_variance_Gurobi(E_return, E_cov, K, bounds)
+        y = res["Return"]
+        x = res["Vol"] 
+        plt.scatter(x,y, marker="o")
+        plt.annotate("GMV",(x,  y))
+    
+    #Set Titles 
+    plt.set_title("Efficient Frontier")
+    plt.set_xlabel("Volatility (Std)")
+    plt.set_ylabel("Return")
+    
+    return plt
+
+
+
+
+
+def areaplot(E_return, E_cov, K, Nbr_PTF, bounds):
+    tmp1 = Ptf_target_optimization_Gurobi(E_return, E_cov, K, Nbr_PTF, bounds)["Efficient_frontiere"]
+    tmp = Ptf_target_optimization_Gurobi(E_return, E_cov, K, Nbr_PTF, bounds)["Efficient_frontiere_weigth"]
+    
+    tmp.index = tmp1.index
+    return tmp.plot.area(stacked = False)
+
+
+def areaplot_wrf(E_return, E_cov, K, Expected_Risk_free, Nbr_PTF, bounds):
+    tmp1 = Ptf_target_optimization_W_Rf_Gurobi(E_return, E_cov, Expected_Risk_free, K, Nbr_PTF, bounds)["Efficient_frontiere"]
+    tmp = Ptf_target_optimization_W_Rf_Gurobi(E_return, E_cov, Expected_Risk_free, K, Nbr_PTF, bounds)["Efficient_frontiere_weigth"]
+    
+    tmp.index = tmp1.index
+    return tmp.plot.area(stacked = False)
 #################### Determination of the expected return  : ####################
 
 ##### Lasso regression  #####
