@@ -1,4 +1,8 @@
 ##Importer les librairies
+import importlib
+import Gurobi as g
+
+importlib.reload(g)
 
 import numpy as np
 import pandas as pd
@@ -46,6 +50,7 @@ def Load_rf(path, date = '2022-08-01'):
     # Keep the last value : 
     
     Expected_Risk_free = Data_SOFR.iloc[-1]
+    
     # convert the annual riskfree rate to per period
     rf_per_period = ((1+Expected_Risk_free)**(1/12))-1
     
@@ -60,9 +65,20 @@ def Load_lasso_variable(path_regression):
     return(Variable_regression)
 
 
+def areaplot(E_return, E_cov_1, K, Nbr_PTF, bounds):
+    tmp1 = g.Ptf_target_optimization_Gurobi(E_return, E_cov_1, K, Nbr_PTF, bounds = (0, 1))["Efficient_frontiere"]
+    tmp = g.Ptf_target_optimization_Gurobi(E_return, E_cov_1, K, Nbr_PTF, bounds = (0, 1))["Efficient_frontiere_weigth"]
+    
+    tmp.index = tmp1.index
+    return tmp.plot.area(stacked = False)
 #################### Without risk-free asset : ####################
 
 ##### Determination of the maximum return portfolio (under certain constraints) #####
+
+
+
+
+
 
 def Max_return_ptf(E_return, bounds = (0, 1)):
       

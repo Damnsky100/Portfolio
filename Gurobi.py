@@ -329,7 +329,7 @@ def plot_ef_Gurobi(E_return, E_cov, Expected_Risk_free, K, Nbr_PTF, bounds, show
     max_vol = max(np.array(E_cov).diagonal().max()**0.5, max(Efficient_frontiere_result['Efficient_frontiere'].index)) 
     #Start by plotting result of efficient frontier without rf
     plt = Efficient_frontiere_result['Efficient_frontiere']['Returns'].plot(kind='line',figsize=(15,11), 
-                                                                        xlim = [0, max_vol + 1], 
+                                                                        xlim = [0, max_vol + 0.01], 
                                                                         ylim = [min(Efficient_frontiere_result['Efficient_frontiere']['Returns'])-0.01, max(Efficient_frontiere_result['Efficient_frontiere']['Returns'])+0.005]) 
     if show_cml :
         Efficient_frontiere_result_W_RF =Ptf_target_optimization_W_Rf_Gurobi(E_return, E_cov, Expected_Risk_free,
