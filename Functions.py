@@ -68,8 +68,7 @@ def Load_lasso_variable(path_regression):
 ##### Determination of the maximum return portfolio (under certain constraints) #####
 
 
-import gurobipy as gp
-from gurobipy import GRB, abs_
+
 
 
 
