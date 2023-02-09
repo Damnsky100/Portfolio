@@ -13,6 +13,10 @@ from sklearn.metrics import mean_squared_error,r2_score,mean_absolute_percentage
 from sklearn.preprocessing import StandardScaler
 from sklearn import covariance
 
+
+
+import gurobipy as gp
+from gurobipy import GRB, abs_
 #################### Importer les données ####################
 
 
